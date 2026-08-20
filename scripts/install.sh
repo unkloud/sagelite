@@ -37,7 +37,7 @@ while [[ $# -gt 0 ]]; do
       echo "Usage: curl -fsSL https://.../install.sh | bash -s -- [VERSION] [OPTIONS]"
       echo ""
       echo "Arguments:"
-      echo "  VERSION             Optional release version tag (e.g. 10.9, v10.9, latest)"
+      echo "  VERSION             Optional release version tag (default: latest release, e.g. 10.9)"
       echo ""
       echo "Options:"
       echo "  -d, --dir=PATH      Installation target directory (default: ~/.local/share/sagelite)"
@@ -72,26 +72,39 @@ case "$HOST_ARCH" in
     ;;
 esac
 
-echo "============================================================"
-echo "  Installing sagelite (Portable SageMath for Linux)"
-echo "  Version:             $VERSION"
-echo "  Target Architecture: $ARCH_TAG"
-echo "  Destination:         $INSTALL_DIR"
-echo "  Repository:          $REPO"
-echo "============================================================"
-
-# Resolve primary and fallback download URLs
+# Resolve download URLs and determine release version
 ARCHIVE_NAME="sagemath-portable-${ARCH_TAG}.tar.zst"
 if [ "$VERSION" = "latest" ]; then
-  PRIMARY_URL="https://github.com/${REPO}/releases/latest/download/${ARCHIVE_NAME}"
-  FALLBACK_URL=""
+  # Dynamically fetch latest released tag name from GitHub API if reachable
+  LATEST_TAG=""
+  if command -v curl >/dev/null 2>&1; then
+    LATEST_TAG="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null | grep -m1 '"tag_name":' | sed -E 's/.*"tag_name":[[:space:]]*"([^"]+)".*/\1/' || true)"
+  fi
+
+  if [ -n "$LATEST_TAG" ]; then
+    VERSION_DISPLAY="latest ($LATEST_TAG)"
+    PRIMARY_URL="https://github.com/${REPO}/releases/download/${LATEST_TAG}/${ARCHIVE_NAME}"
+    FALLBACK_URL="https://github.com/${REPO}/releases/latest/download/${ARCHIVE_NAME}"
+  else
+    VERSION_DISPLAY="latest"
+    PRIMARY_URL="https://github.com/${REPO}/releases/latest/download/${ARCHIVE_NAME}"
+    FALLBACK_URL=""
+  fi
 else
-  # Format tag with leading 'v' as primary, unadorned as fallback
+  VERSION_DISPLAY="$VERSION"
   TAG_V="v${VERSION#v}"
   TAG_RAW="${VERSION#v}"
   PRIMARY_URL="https://github.com/${REPO}/releases/download/${TAG_V}/${ARCHIVE_NAME}"
   FALLBACK_URL="https://github.com/${REPO}/releases/download/${TAG_RAW}/${ARCHIVE_NAME}"
 fi
+
+echo "============================================================"
+echo "  Installing sagelite (Portable SageMath for Linux)"
+echo "  Version:             $VERSION_DISPLAY"
+echo "  Target Architecture: $ARCH_TAG"
+echo "  Destination:         $INSTALL_DIR"
+echo "  Repository:          $REPO"
+echo "============================================================"
 
 # Create install directory
 mkdir -p "$INSTALL_DIR"
