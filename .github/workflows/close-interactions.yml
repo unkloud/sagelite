@@ -1,0 +1,52 @@
+name: Auto Close Issues and Pull Requests
+
+on:
+  issues:
+    types: [ opened ]
+  pull_request_target:
+    types: [ opened ]
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  close:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Handle Issues
+        if: github.event_name == 'issues'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: 'Thank you for your interest. `sagelite` is a personal project maintained for individual use and does not accept external issues, bug reports, or feature requests as outlined in the [project disclaimer](https://github.com/' + context.repo.owner + '/' + context.repo.repo + '#9-disclaimer--contributions). This issue is being automatically closed.'
+            });
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              state: 'closed',
+              state_reason: 'not_planned'
+            });
+
+      - name: Handle Pull Requests
+        if: github.event_name == 'pull_request_target'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: 'Thank you for your interest. `sagelite` is a personal project maintained for individual use and does not accept external pull requests or contributions as outlined in the [project disclaimer](https://github.com/' + context.repo.owner + '/' + context.repo.repo + '#9-disclaimer--contributions). This pull request is being automatically closed.'
+            });
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+              state: 'closed'
+            });
