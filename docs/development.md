@@ -1,6 +1,6 @@
 # Developer Guide: `sagelite`
 
-This document details the build system, architecture, recipe configuration, verification testing, and release process for `sagelite`.
+This document details the build system, architecture, recipe configuration, verification testing, release process, and future roadmap for `sagelite`.
 
 ---
 
@@ -173,3 +173,33 @@ You can also trigger builds and releases without tagging:
 3. Click **Run workflow**:
    * Specify `version` (e.g. `10.9`, `10.10`, or `latest`).
    * Check **Publish as GitHub Release** if you want to publish directly to GitHub Releases.
+
+---
+
+## 9. Future Roadmap & Technical TODOs
+
+### 1. Automated Requirements Replay on Upgrades (Phase 2 Lifecycle)
+* **Goal:** Allow users to retain custom `pip install`ed packages when upgrading between minor SageMath releases without causing ABI conflicts with core libraries.
+* **Tasks:**
+  - [ ] **Build-Time Manifest Generation:** During `scripts/build.sh`, save the baseline bundled package names into `$PREFIX/lib/sagelite_manifest.txt` via `pip list --format=freeze | cut -d= -f1 | sort -u`.
+  - [ ] **Pre-Flight Diffing in `install.sh`:** Before replacing `~/.local/share/sagelite`, diff the active environment's package list against `sagelite_manifest.txt` to capture only user-added packages into `~/.sage/custom_requirements.txt`.
+  - [ ] **Post-Flight Replay:** Execute `$NEW_DIR/bin/python -m pip install -r ~/.sage/custom_requirements.txt` with non-fatal error handling so upgrade success is never blocked by external package build errors.
+
+### 2. Desktop & GUI Menu Integration
+* **Goal:** Enable users to launch SageMath interactive shell and JupyterLab directly from their desktop environment application menus (GNOME, KDE, XFCE).
+* **Tasks:**
+  - [ ] Add `./sage --install-desktop` subcommand.
+  - [ ] Generate an XDG `.desktop` file at `~/.local/share/applications/sagelite.desktop` and `~/.local/share/applications/sagelite-jupyter.desktop`.
+  - [ ] Install bundled SageMath SVG icon to `~/.local/share/icons/hicolor/scalable/apps/sagelite.svg`.
+
+### 3. Automated Upstream Version Watcher (CI Cron)
+* **Goal:** Automatically detect when new stable SageMath releases are published to Conda-Forge.
+* **Tasks:**
+  - [ ] Implement a scheduled GitHub Actions cron job (`.github/workflows/check-upstream.yml`) running weekly.
+  - [ ] Query Conda-Forge channel API for the highest stable `sage` version tag.
+  - [ ] If a newer version is discovered, automatically open a tracking issue or trigger a draft release build.
+
+### 4. Offline / Air-Gapped Deployment Bundle
+* **Goal:** Simplify installation on air-gapped compute clusters and offline machines without internet access.
+* **Tasks:**
+  - [ ] Provide an `--offline` flag in `scripts/install.sh` that looks for local `sagemath-portable-<arch>.tar.zst` in the current directory instead of attempting network downloads.
