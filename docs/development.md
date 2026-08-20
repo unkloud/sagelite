@@ -1,56 +1,60 @@
-# Developer Guide for `sagelite`
+# Developer Guide: `sagelite`
 
-This document details the build system, contribution workflow, recipe management, and testing infrastructure for developers working on the `sagelite` project.
-
----
-
-## 1. Prerequisites
-
-To build and package `sagelite` locally, your build machine requires:
-
-* **Operating System:** Linux (`x86_64` or `aarch64`)
-* **Standard Utilities:** `curl`, `tar`, `bzip2`, `zstd`, `strip`
-* **Internet Access:** Connection to `conda-forge` repositories during build (the resulting archive is fully offline).
-
-> Note: `micromamba` does not need to be installed on your system; `scripts/build.sh` automatically downloads a standalone `micromamba` binary into `.cache/bin/` if not found in `$PATH`.
+This document details the build system, architecture, recipe configuration, and verification testing for contributors working on `sagelite`.
 
 ---
 
-## 2. Build Pipeline Architecture
+## 1. Architecture Overview
+
+`sagelite` packages standard pre-compiled Conda-Forge packages into a relocatable native Linux directory.
 
 ```text
-[recipes/environment.*.yml]
-          │
-          ▼  (micromamba create)
+[recipes/environment.<arch>.yml]
+               │
+               ▼  (micromamba create)
 [$PREFIX (Staged Environment)]
-          │
-          ▼  (scripts/build.sh: Payload Optimization)
-  - Remove *.la and non-compiler *.a
-  - Remove share/doc, share/man, and test suites
-  - Strip unneeded ELF symbols (strip --strip-unneeded)
-  - Inject scripts/entrypoint.sh -> $PREFIX/sage
-          │
-          ▼  (conda-pack --compress-level 19 --ignore-missing-files)
+               │
+               ▼  (scripts/build.sh: Payload Optimization)
+  1. Remove static libraries (*.a, *.la) except compiler internals
+  2. Remove documentation, manual pages, and test suites
+  3. Strip debug symbols from binaries and .so files
+  4. Inject scripts/entrypoint.sh -> $PREFIX/sage
+               │
+               ▼  (conda-pack --compress-level 19 --ignore-missing-files)
 [artifacts/sagemath-portable-<arch>.tar.zst]
 ```
+
+### Core Components
+1. **Upstream Source (`conda-forge`):** Provides binaries compiled against a `glibc 2.28` baseline sysroot.
+2. **Solver & Staging (`micromamba`):** Resolves dependency graphs and unpacks packages in under a minute.
+3. **Payload Optimization (`scripts/build.sh`):** Reduces total uncompressed footprint from ~8 GB to ~4.2 GB.
+4. **Relocation & Packaging (`conda-pack`):** Records prefix placeholders and compresses the tree with Zstandard level 19 into a ~1.3 GB archive.
+5. **Entrypoint Wrapper (`scripts/entrypoint.sh`):** Resolves directory location dynamically, runs `conda-unpack` once on first launch, and sets runtime environment isolation variables.
+
+---
+
+## 2. Build Prerequisites
+
+* **Operating System:** Linux (`x86_64` or `aarch64`)
+* **Required Tools:** `curl`, `tar`, `bzip2`, `zstd`, `strip`
+* **Internet Access:** Needed only during build to download packages from Conda-Forge.
+
+> Note: `micromamba` is automatically downloaded into `.cache/bin/` by `scripts/build.sh` if not found in `$PATH`.
 
 ---
 
 ## 3. Local Build Workflow
 
-### 3.1. Auto-Detect Architecture & Build
-
-The build script detects the host architecture (`uname -m`) and selects the appropriate recipe:
+### 3.1. Standard Build (Auto-Detect Architecture)
 
 ```bash
-# Automatically builds artifacts/sagemath-portable-<arch>.tar.zst
+# Auto-detects architecture (x86_64 / aarch64) and builds artifacts/sagemath-portable-<arch>.tar.zst
 ./scripts/build.sh
 ```
 
-### 3.2. Building for Specific Recipes or Output Paths
+### 3.2. Custom Recipe or Output Path
 
 ```bash
-# Build with an explicit recipe and custom destination
 ./scripts/build.sh recipes/environment.x86_64.yml artifacts/custom-sage-x86_64.tar.zst
 ```
 
@@ -60,38 +64,40 @@ The build script detects the host architecture (`uname -m`) and selects the appr
 
 ### 4.1. Automated 5-Tier Verification Suite
 
-`scripts/test.sh` executes five validation tiers against a target Sage executable:
+`scripts/test.sh` runs five sequential validation tiers:
 
 ```bash
-# Extract the built archive to a test directory
+# 1. Extract archive to a test directory
 mkdir -p /tmp/test-sagelite
 tar --zstd -xf artifacts/sagemath-portable-x86_64.tar.zst -C /tmp/test-sagelite
 
-# Run the 5-tier test suite (~30 seconds)
+# 2. Run verification suite (~30 seconds)
 ./scripts/test.sh /tmp/test-sagelite/sage
 ```
 
 ### 4.2. Testing Relocatability
 
-To verify that dynamic prefix patching (`conda-unpack`) works correctly when the distribution is moved:
+Verify that the distribution functions after being moved to a different path:
 
 ```bash
 # Relocate directory
 mv /tmp/test-sagelite /tmp/relocated-sagelite
 
-# Run tests from the relocated path
+# Execute tests from relocated path
 ./scripts/test.sh /tmp/relocated-sagelite/sage
 ```
 
-### 4.3. Test Tiers Overview
+### 4.3. Test Tiers Summary
 
-1. **Core Algebra & CAS Backends:** Validates GAP, Singular, and PARI/GP interfaces.
-2. **Official Doctest Suite:** Runs `sage.doctest` controller on core algebra modules (1,300+ tests).
-3. **Cython JIT Compilation:** Dynamically compiles a C extension using the bundled GCC toolchain.
-4. **Pip Extensibility:** Checks that the isolated `pip` binary is functional.
-5. **JupyterLab Stack:** Validates headless startup of the notebook server.
+| Tier | Test Scope | Verification Method |
+| :--- | :--- | :--- |
+| **1. CAS Backends** | GAP, Singular, PARI/GP | Evaluates basic algebra and group theory assertions |
+| **2. Official Doctests** | `sage.doctest` subsystem | Executes 1,300+ official tests on core combinatorics & algebra modules |
+| **3. Cython JIT** | Embedded compiler toolchain | Compiles and runs a dynamic C extension via `cython_lambda` |
+| **4. Pip Extensibility** | Package management | Validates isolated `pip` binary |
+| **5. JupyterLab** | Interactive notebook server | Verifies headless server startup |
 
-To run the extended full doctest suite across all modules:
+To run the extended full doctest suite across all Sage modules:
 
 ```bash
 ./scripts/test.sh /tmp/relocated-sagelite/sage full
@@ -101,34 +107,33 @@ To run the extended full doctest suite across all modules:
 
 ## 5. Recipe Management Guidelines
 
-Environment recipes are located in `recipes/`:
-* `recipes/environment.x86_64.yml`: Package definitions for Intel/AMD 64-bit architectures.
-* `recipes/environment.aarch64.yml`: Package definitions for ARM64 architectures.
+Recipes are defined in `recipes/`:
+* `recipes/environment.x86_64.yml` (Intel/AMD 64-bit)
+* `recipes/environment.aarch64.yml` (ARM64)
 
-### Package Selection Rules
-1. **SageMath Wildcard:** Pin SageMath using `sage = 10.*` to track stable 10.x releases from Conda-Forge.
-2. **Python Version:** Locked to `python = 3.12.*`.
-3. **Compiler Toolchains:**
-   * For `x86_64`: `gcc_linux-64`, `gxx_linux-64`, `gfortran_linux-64`, `sysroot_linux-64`.
-   * For `aarch64`: `gcc_linux-aarch64`, `gxx_linux-aarch64`, `gfortran_linux-aarch64`, `sysroot_linux-aarch64`.
-4. **Relocation & Compression Packages:** Ensure `conda-pack` and `zstandard` are present in dependencies.
+### Rules for Updating Recipes
+* **Channels:** Always lock channels to `conda-forge` and `nodefaults`.
+* **Sage Version:** Use `sage = 10.*` wildcard to automatically track the latest stable 10.x release.
+* **Python Version:** Pin to `python = 3.12.*`.
+* **Compilers:** Include `gcc_<arch>`, `gxx_<arch>`, `gfortran_<arch>`, and `sysroot_<arch>`.
+* **Packaging:** Include `conda-pack` and `zstandard`.
 
 ---
 
 ## 6. Critical Technical Invariants
 
-* **Preserving Compiler Runtimes:** When stripping static libraries in `scripts/build.sh`, never delete static files under `lib/gcc/*` or `sysroot/*`. These static archives (such as `libgcc.a`) are required by GCC/ld when compiling Cython extensions at runtime.
-* **Conda-Pack Flags:** Always invoke `conda-pack` with `--ignore-missing-files` because non-essential files are intentionally stripped before packaging.
-* **Runtime Isolation:** The `./sage` wrapper must enforce `PYTHONNOUSERSITE=1` and set `PYTHONHOME="$DIR"` to guarantee complete isolation from host Python packages.
+1. **Preserve Compiler Static Runtimes:** When stripping static libraries in `scripts/build.sh`, never delete files under `lib/gcc/*` or `sysroot/*`. GCC requires internal static archives (`libgcc.a`, `libstdc++.a`) when compiling Cython extensions at runtime.
+2. **Conda-Pack Missing Files Flag:** Always pass `--ignore-missing-files` to `conda-pack` because non-essential files are stripped prior to packing.
+3. **Cython Globals in Non-Interactive Mode:** In CLI evaluation scripts (`sage -c "..."`), initialize user-space globals via `set_globals(globals())` before importing dynamically compiled Cython modules.
+4. **Environment Isolation:** The `./sage` wrapper must enforce `PYTHONNOUSERSITE=1` and set `PYTHONHOME="$DIR"` to prevent host Python package pollution.
 
 ---
 
 ## 7. CI/CD Matrix Pipeline
 
 The GitHub Actions workflow (`.github/workflows/build.yml`) builds and tests on native runners:
-
-* **`x86_64`:** Runs on `ubuntu-latest`.
-* **`aarch64`:** Runs on `ubuntu-24.04-arm`.
-* **Caching:** Caches `~/.micromamba/pkgs` keyed by recipe hash.
-* **Verification:** Automatically extracts, relocates, and executes `scripts/test.sh` on every build.
-* **Releases:** On git tag pushes matching `v*`, automatically bundles `.tar.zst` packages, SHA256 checksums, and `scripts/install.sh` into a GitHub Release.
+* `x86_64` on `ubuntu-latest`
+* `aarch64` on `ubuntu-24.04-arm`
+* Caches `~/.micromamba/pkgs` keyed by recipe hash.
+* Tests directory extraction, relocation, and execution of `scripts/test.sh` on every build.
+* On Git tags (`v*`), automatically publishes `.tar.zst` packages, SHA256 checksums, and `scripts/install.sh` to GitHub Releases.

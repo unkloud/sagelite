@@ -1,6 +1,6 @@
 # AGENTS.md — Development & Operational Guidelines for `sagelite`
 
-This document serves as the operational guide, architectural specification, and guardrail manual for AI agents and human developers working on the **`sagelite`** repository.
+This document serves as the operational guide, architectural specification, and guardrail manual for AI agents working on the **`sagelite`** repository.
 
 ---
 
@@ -60,7 +60,7 @@ sagelite/
 │   └── workflows/
 │       └── build.yml             # Native matrix CI/CD build & release pipeline (x86_64 & ARM64)
 ├── docs/
-│   └── vision.md                 # Project vision, architecture & technical blueprint
+│   └── development.md           # Developer guide, build mechanics & architecture
 ├── recipes/
 │   ├── environment.x86_64.yml    # Conda environment definition for x86_64
 │   └── environment.aarch64.yml   # Conda environment definition for aarch64
