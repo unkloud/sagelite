@@ -1,0 +1,19 @@
+# Build artifacts & package outputs
+artifacts/
+*.tar.zst
+*.sha256
+*.tar.gz
+*.tar.bz2
+
+# Local micromamba & caches
+.cache/
+.mamba/
+.micromamba/
+
+# Temporary test folders
+/tmp/test-*
+/tmp/relocated-*
+
+# Python caches
+__pycache__/
+*.pyc

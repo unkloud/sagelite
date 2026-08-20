@@ -1,0 +1,25 @@
+name: sage-portable
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  # Core System & SageMath
+  - sage = 10.*
+  - python = 3.12.*
+  - pip
+
+  # Interactive Notebook UI
+  - jupyterlab
+  - ipywidgets
+
+  # Runtime Cython & Compilation Toolchain (for %cython cells)
+  - cython >= 3.0
+  - gcc_linux-64
+  - gxx_linux-64
+  - gfortran_linux-64
+  - sysroot_linux-64
+  - pkg-config
+
+  # Packaging & Relocation Utilities
+  - conda-pack
+  - zstandard
