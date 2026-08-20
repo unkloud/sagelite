@@ -211,7 +211,16 @@ rm -rf ~/.local/share/sagelite ~/.local/bin/sage
 
 ---
 
-## 9. License & Acknowledgments
+## 9. Disclaimer & Contributions
+
+* **Personal Project:** `sagelite` is a personal project maintained for individual use and shared with the broader community as-is.
+* **No External Contributions:** Pull requests, issues, and feature requests are not accepted, as no resources are allocated to triage or manage external contributions.
+* **Upstream Updates:** The distribution will receive periodic upstream updates as SageMath evolves, provided Conda-Forge continues to build and maintain the underlying binary packages.
+* **No Warranties or Guarantees:** This software is provided with no guarantees of fitness, ongoing maintenance, or long-term support.
+
+---
+
+## 10. License & Acknowledgments
 
 `sagelite` is licensed under the [GNU General Public License v3.0 or later (GPL-3.0-or-later)](LICENSE).
 
