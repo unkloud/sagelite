@@ -44,9 +44,19 @@ echo "==> Using micromamba at: $(command -v micromamba)"
 echo "==> Building recipe: $RECIPE_FILE"
 echo "==> Target output: $OUTPUT_ARCHIVE"
 
+# Check if a specific version was requested (e.g. from a release tag like v10.5 or 10.5)
+EXTRA_SPECS=()
+if [ -n "${SAGELITE_VERSION:-}" ]; then
+  SAGE_TAG="${SAGELITE_VERSION#v}"
+  if [[ "$SAGE_TAG" =~ ^[0-9]+\.[0-9]+ ]]; then
+    echo "==> Target version specified from release tag: sage = ${SAGE_TAG}*"
+    EXTRA_SPECS+=("sage=${SAGE_TAG}*")
+  fi
+fi
+
 # 1. Create the isolated Conda environment using micromamba
 echo "==> [1/4] Creating isolated Conda environment using micromamba..."
-micromamba create -y -n "$ENV_NAME" -f "$RECIPE_FILE"
+micromamba create -y -n "$ENV_NAME" -f "$RECIPE_FILE" "${EXTRA_SPECS[@]}"
 
 # 2. Resolve environment prefix path
 PREFIX="$(micromamba env list | awk -v env="$ENV_NAME" '$1 == env {print $NF}')"
