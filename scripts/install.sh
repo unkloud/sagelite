@@ -78,7 +78,7 @@ if [ "$VERSION" = "latest" ]; then
   # Dynamically fetch latest released tag name from GitHub API if reachable
   LATEST_TAG=""
   if command -v curl >/dev/null 2>&1; then
-    LATEST_TAG="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null | grep -m1 '"tag_name":' | sed -E 's/.*"tag_name":[[:space:]]*"([^"]+)".*/\1/' || true)"
+    LATEST_TAG="$(curl -fsSL -A "Mozilla/5.0 (X11; Linux x86_64)" "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null | grep -m1 '"tag_name":' | sed -E 's/.*"tag_name":[[:space:]]*"([^"]+)".*/\1/' || true)"
   fi
 
   if [ -n "$LATEST_TAG" ]; then
@@ -115,18 +115,56 @@ trap 'rm -f "$TEMP_ARCHIVE"' EXIT
 
 download_file() {
   local url="$1"
-  if command -v curl >/dev/null 2>&1; then
-    curl -fL --progress-bar -o "$TEMP_ARCHIVE" "$url"
-  elif command -v wget >/dev/null 2>&1; then
-    wget --show-progress -O "$TEMP_ARCHIVE" "$url"
-  else
-    echo "ERROR: Neither curl nor wget was found. Please install curl or wget." >&2
-    exit 1
+  local dest="$2"
+
+  # 1. Try aria2c (fastest: multi-connection parallel chunk downloading)
+  if command -v aria2c >/dev/null 2>&1; then
+    echo "==> Downloading via aria2c (accelerated multi-connection)..."
+    if aria2c -x 16 -s 16 -k 1M --continue=true --auto-file-renaming=false \
+      --header="User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0" \
+      -d "$(dirname "$dest")" -o "$(basename "$dest")" "$url"; then
+      return 0
+    fi
   fi
+
+  # 2. Try axel (multi-threaded download accelerator)
+  if command -v axel >/dev/null 2>&1; then
+    echo "==> Downloading via axel (multi-threaded)..."
+    if axel -n 8 -a -o "$dest" "$url"; then
+      return 0
+    fi
+  fi
+
+  # 3. Optimized curl (browser User-Agent, 1MB buffer, automatic retries, resumption)
+  if command -v curl >/dev/null 2>&1; then
+    if curl -fL --progress-bar \
+      -A "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0" \
+      --retry 3 \
+      --retry-delay 1 \
+      --retry-connrefused \
+      --buffer-size 1048576 \
+      -C - \
+      -o "$dest" "$url"; then
+      return 0
+    fi
+  fi
+
+  # 4. Optimized wget fallback
+  if command -v wget >/dev/null 2>&1; then
+    if wget --show-progress \
+      --user-agent="Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0" \
+      --tries=3 \
+      -c \
+      -O "$dest" "$url"; then
+      return 0
+    fi
+  fi
+
+  return 1
 }
 
-if ! download_file "$PRIMARY_URL"; then
-  if [ -n "$FALLBACK_URL" ] && download_file "$FALLBACK_URL"; then
+if ! download_file "$PRIMARY_URL" "$TEMP_ARCHIVE"; then
+  if [ -n "$FALLBACK_URL" ] && download_file "$FALLBACK_URL" "$TEMP_ARCHIVE"; then
     echo "==> Downloaded from $FALLBACK_URL"
   else
     echo "ERROR: Failed to download release archive for version '$VERSION'." >&2
