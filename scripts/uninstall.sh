@@ -75,6 +75,30 @@ else
   echo "    [SKIP] Symlink $BIN_DIR/sage does not exist."
 fi
 
+# Clean up desktop shortcuts and icons if present
+DESKTOP_DIR="$HOME/.local/share/applications"
+ICON_DIR="$HOME/.local/share/icons/hicolor"
+REMOVED_DESKTOP=false
+
+for dfile in "$DESKTOP_DIR/sagelite"*.desktop; do
+  if [ -f "$dfile" ]; then
+    echo "==> Removing desktop launcher: $dfile..."
+    rm -f "$dfile"
+    REMOVED_DESKTOP=true
+  fi
+done
+
+for ifile in "$ICON_DIR"/*/apps/sagelite.*; do
+  if [ -f "$ifile" ]; then
+    echo "==> Removing icon: $ifile..."
+    rm -f "$ifile"
+  fi
+done
+
+if [ "$REMOVED_DESKTOP" = true ] && command -v update-desktop-database >/dev/null 2>&1; then
+  update-desktop-database "$DESKTOP_DIR" 2>/dev/null || true
+fi
+
 echo ""
 echo "============================================================"
 echo "  sagelite has been successfully uninstalled."

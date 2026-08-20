@@ -180,9 +180,10 @@ You can also trigger builds and releases without tagging:
 
 ### 1. Built-in Diagnostic Health Check (`sage --doctor` / `sage --check`)
 * **Goal:** Provide users with an instant self-diagnostic command to verify the internal compiler toolchain, sysroot headers, and CAS dynamic libraries on their host system without external scripts.
-* **Tasks:**
+* **Technical Considerations & Tasks:**
   - [ ] Add `./sage --doctor` / `./sage --check` CLI subcommand in `scripts/entrypoint.sh`.
-  - [ ] Run fast in-process diagnostics:
+  - [ ] **Hardened `/tmp` `noexec` Safety:** Ensure temporary probe files and JIT compilation tests execute in `$DOT_SAGE/temp` (`~/.sage/temp`) rather than `/tmp` to avoid false `EACCES` failures on enterprise `noexec`-mounted partitions.
+  - [ ] **Probe Diagnostics:**
     - Verify GCC toolchain can compile a minimal C extension and link against `$DIR/lib`.
     - Verify GAP, Singular, and PARI/GP respond to basic algebraic evaluations.
     - Check `$DIR/bin/python` interpreter and JupyterLab server responsiveness.
@@ -190,9 +191,9 @@ You can also trigger builds and releases without tagging:
 
 ### 2. Automated Requirements Replay on Upgrades (Phase 2 Lifecycle)
 * **Goal:** Allow users to retain custom `pip install`ed packages when upgrading between SageMath releases while safely handling Python minor version transitions.
-* **Tasks:**
-  - [ ] **Build-Time Manifest Generation:** During `scripts/build.sh`, save the baseline bundled package names into `$PREFIX/lib/sagelite_manifest.txt` via `pip list --format=freeze | cut -d= -f1 | sort -u`.
-  - [ ] **Pre-Flight Diffing in `install.sh`:** Before replacing `~/.local/share/sagelite`, diff the active environment's package list against `sagelite_manifest.txt` to capture only user-added packages into `~/.sage/custom_requirements.txt`.
+* **Technical Considerations & Tasks:**
+  - [ ] **PEP 376 `INSTALLER` Metadata Inspection:** Instead of static text diffing, query `importlib.metadata` distributions where `dist.read_text('INSTALLER') == 'pip'` to extract ground-truth user-installed packages, automatically ignoring core packages installed by `conda`.
+  - [ ] **Pre-Flight Capture:** Before replacing `~/.local/share/sagelite`, write discovered package names to `~/.sage/custom_requirements.txt`.
   - [ ] **Cross-Python Version Invalidation:** If upgrading across Python minor versions (e.g. Python 3.12 $\rightarrow$ 3.13), strip Python-specific binary build pins and re-resolve unpinned package names against the new Python interpreter.
   - [ ] **Non-Fatal Post-Flight Replay:** Execute `$NEW_DIR/bin/python -m pip install -r ~/.sage/custom_requirements.txt` with non-fatal logging so upgrade success is never blocked by external wheel availability.
 
@@ -205,17 +206,20 @@ You can also trigger builds and releases without tagging:
 
 ### 4. Desktop & GUI Menu Integration
 * **Goal:** Enable users to launch SageMath interactive shell and JupyterLab directly from their desktop environment application menus (GNOME, KDE, XFCE).
-* **Tasks:**
+* **Technical Considerations & Tasks:**
   - [ ] Add `./sage --install-desktop` subcommand.
-  - [ ] Generate an XDG `.desktop` file at `~/.local/share/applications/sagelite.desktop` and `~/.local/share/applications/sagelite-jupyter.desktop`.
+  - [ ] Generate XDG `.desktop` files at `~/.local/share/applications/sagelite.desktop` and `~/.local/share/applications/sagelite-jupyter.desktop`.
   - [ ] Install bundled SageMath SVG icon to `~/.local/share/icons/hicolor/scalable/apps/sagelite.svg`.
+  - [ ] **Desktop Cache Invalidation:** Automatically invoke `update-desktop-database ~/.local/share/applications` and `gtk-update-icon-cache` upon installation to refresh application menus without requiring a reboot or re-login.
+  - [ ] **Clean Uninstallation Footprint:** Ensure `scripts/uninstall.sh` purges installed `.desktop` and icon files and updates the desktop database so dead launchers are never orphaned.
 
 ### 5. Automated Upstream Version Watcher (CI Cron)
 * **Goal:** Automatically detect when new stable SageMath releases are published to Conda-Forge.
-* **Tasks:**
+* **Technical Considerations & Tasks:**
   - [ ] Implement a scheduled GitHub Actions cron job (`.github/workflows/check-upstream.yml`) running weekly.
   - [ ] Query Conda-Forge channel API for the highest stable `sage` version tag.
-  - [ ] If a newer version is discovered, automatically trigger a draft release build or send a notification.
+  - [ ] **Transitive ABI Stability Guard:** Rather than auto-publishing immediately, the watcher triggers a test matrix run on a draft branch to verify the full 5-tier test suite passes (preventing broken releases due to upstream package indexing lag).
+  - [ ] Create a GitHub Draft Release upon 100% test pass.
 
 ### 6. Offline / Air-Gapped Deployment Bundle
 * **Goal:** Simplify installation on air-gapped compute clusters and offline machines without internet access.
