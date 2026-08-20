@@ -58,7 +58,8 @@ When implementing features, modifying recipes, or running builds, you **MUST** u
 sagelite/
 ├── .github/
 │   └── workflows/
-│       └── build.yml             # Native matrix CI/CD build & release pipeline (x86_64 & ARM64)
+│       ├── build.yml             # Native matrix CI/CD build & release pipeline (x86_64 & ARM64)
+│       └── close-interactions.yml# Automated closure of issues and PRs (personal project policy)
 ├── docs/
 │   └── development.md           # Developer guide, build mechanics & architecture
 ├── recipes/
@@ -86,8 +87,8 @@ sagelite/
 # 1. Build the portable distribution (auto-detects architecture):
 ./scripts/build.sh
 
-# 2. Or build with explicit recipe and custom output path:
-./scripts/build.sh recipes/environment.x86_64.yml artifacts/sagemath-portable-x86_64.tar.zst
+# 2. Or build with explicit version pinning:
+SAGELITE_VERSION=10.9 ./scripts/build.sh
 ```
 
 ### 4.2. Local Verification & Relocation Testing
@@ -110,15 +111,25 @@ mv /tmp/test-sagelite /tmp/relocated-sagelite
 ### 4.3. Installing and Uninstalling
 
 ```bash
-# Install to ~/.local/share/sagelite and symlink to ~/.local/bin/sage:
+# Install latest release to ~/.local/share/sagelite:
 ./scripts/install.sh
 
-# Install to custom path:
-./scripts/install.sh --dir=/opt/sagelite
+# Install specific version:
+./scripts/install.sh 10.9
 
 # Uninstall:
 ./scripts/uninstall.sh -y
 ```
+
+### 4.4. Release Tagging & Publishing Workflow
+
+```bash
+# Create and push a signed tag matching SageMath's version:
+git tag -s v10.9 -m "Release SageMath v10.9"
+git push origin v10.9
+```
+
+GitHub Actions will automatically build, test across `x86_64` and `aarch64`, generate checksums, and publish the GitHub Release.
 
 ---
 

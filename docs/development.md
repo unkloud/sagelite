@@ -1,6 +1,6 @@
 # Developer Guide: `sagelite`
 
-This document details the build system, architecture, recipe configuration, and verification testing for contributors working on `sagelite`.
+This document details the build system, architecture, recipe configuration, verification testing, and release process for `sagelite`.
 
 ---
 
@@ -136,4 +136,52 @@ The GitHub Actions workflow (`.github/workflows/build.yml`) builds and tests on 
 * `aarch64` on `ubuntu-24.04-arm`
 * Caches `~/.micromamba/pkgs` keyed by recipe hash.
 * Tests directory extraction, relocation, and execution of `scripts/test.sh` on every build.
-* On Git tags (`v*`), automatically publishes `.tar.zst` packages, SHA256 checksums, and `scripts/install.sh` to GitHub Releases.
+
+---
+
+## 8. Release Tagging & Publishing Process
+
+Release builds and GitHub Releases are driven entirely by Git tags or manual dispatch.
+
+### 8.1. Publishing a Release via Git Tag
+
+To release a specific version of SageMath (e.g. `10.9`, `10.10`):
+
+```bash
+# 1. Create an annotated tag matching SageMath's version
+git tag -a v10.9 -m "Release SageMath v10.9"
+
+# 2. Push the tag to GitHub
+git push origin v10.9
+```
+
+#### What Happens Automatically:
+1. GitHub Actions detects the tag push (`v10.9`).
+2. The workflow parses `SAGELITE_VERSION=10.9` and instructs `micromamba` to build that exact version.
+3. Both `x86_64` and `aarch64` runners compile, strip, package, and execute the 5-tier test suite.
+4. If tests pass, GitHub Actions creates a GitHub Release titled **`SageMath v10.9`** and attaches:
+   * `sagemath-portable-x86_64.tar.zst`
+   * `sagemath-portable-x86_64.tar.zst.sha256`
+   * `sagemath-portable-aarch64.tar.zst`
+   * `sagemath-portable-aarch64.tar.zst.sha256`
+   * `scripts/install.sh`
+
+### 8.2. Tagging Multiple Releases on the Same Commit
+
+Because Git tags are lightweight pointers, you can tag the same commit for different target versions:
+
+```bash
+git tag -a v10.8 -m "Release SageMath v10.8"
+git push origin v10.8
+```
+
+Each pushed tag triggers its own independent GitHub Actions release workflow.
+
+### 8.3. Manual Build Trigger via GitHub UI (`workflow_dispatch`)
+
+You can also trigger builds and releases without tagging:
+1. Navigate to the **Actions** tab in your GitHub repository.
+2. Select **Build and Release sagelite**.
+3. Click **Run workflow**:
+   * Specify `version` (e.g. `10.9`, `10.10`, or `latest`).
+   * Check **Publish as GitHub Release** if you want to publish directly to GitHub Releases.
