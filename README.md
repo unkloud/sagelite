@@ -10,10 +10,17 @@ A lightweight, zero-setup, and portable SageMath distribution for Linux.
 
 ### Automated Installation (Recommended)
 
-Installs `sagelite` to `~/.local/share/sagelite` and symlinks `sage` into `~/.local/bin`:
+Installs the latest release of `sagelite` to `~/.local/share/sagelite` and symlinks `sage` into `~/.local/bin`:
 
 ```bash
+# Install the latest release
 curl -fsSL https://github.com/sagelite/sagelite/releases/latest/download/install.sh | bash
+```
+
+To install a specific version (e.g. `10.9`):
+
+```bash
+curl -fsSL https://github.com/sagelite/sagelite/releases/latest/download/install.sh | bash -s -- 10.9
 ```
 
 To install to a custom directory:

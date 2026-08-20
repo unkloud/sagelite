@@ -34,7 +34,10 @@ while [[ $# -gt 0 ]]; do
     --help|-h)
       echo "sagelite installer"
       echo ""
-      echo "Usage: curl -fsSL https://.../install.sh | bash -s -- [OPTIONS]"
+      echo "Usage: curl -fsSL https://.../install.sh | bash -s -- [VERSION] [OPTIONS]"
+      echo ""
+      echo "Arguments:"
+      echo "  VERSION             Optional release version tag (e.g. 10.9, v10.9, latest)"
       echo ""
       echo "Options:"
       echo "  -d, --dir=PATH      Installation target directory (default: ~/.local/share/sagelite)"
@@ -42,6 +45,10 @@ while [[ $# -gt 0 ]]; do
       echo "  --repo=OWNER/REPO   GitHub repository (default: sagelite/sagelite)"
       echo "  -h, --help          Show this help message"
       exit 0
+      ;;
+    [0-9]*|v[0-9]*)
+      VERSION="$1"
+      shift
       ;;
     *)
       echo "Unknown option: $1" >&2
@@ -67,16 +74,23 @@ esac
 
 echo "============================================================"
 echo "  Installing sagelite (Portable SageMath for Linux)"
+echo "  Version:             $VERSION"
 echo "  Target Architecture: $ARCH_TAG"
 echo "  Destination:         $INSTALL_DIR"
 echo "  Repository:          $REPO"
 echo "============================================================"
 
-# Resolve download URL
+# Resolve primary and fallback download URLs
+ARCHIVE_NAME="sagemath-portable-${ARCH_TAG}.tar.zst"
 if [ "$VERSION" = "latest" ]; then
-  DOWNLOAD_URL="https://github.com/${REPO}/releases/latest/download/sagemath-portable-${ARCH_TAG}.tar.zst"
+  PRIMARY_URL="https://github.com/${REPO}/releases/latest/download/${ARCHIVE_NAME}"
+  FALLBACK_URL=""
 else
-  DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${VERSION}/sagemath-portable-${ARCH_TAG}.tar.zst"
+  # Format tag with leading 'v' as primary, unadorned as fallback
+  TAG_V="v${VERSION#v}"
+  TAG_RAW="${VERSION#v}"
+  PRIMARY_URL="https://github.com/${REPO}/releases/download/${TAG_V}/${ARCHIVE_NAME}"
+  FALLBACK_URL="https://github.com/${REPO}/releases/download/${TAG_RAW}/${ARCHIVE_NAME}"
 fi
 
 # Create install directory
@@ -86,13 +100,26 @@ echo "==> [1/3] Downloading portable distribution archive..."
 TEMP_ARCHIVE="$(mktemp --suffix=.tar.zst)"
 trap 'rm -f "$TEMP_ARCHIVE"' EXIT
 
-if command -v curl >/dev/null 2>&1; then
-  curl -fL --progress-bar -o "$TEMP_ARCHIVE" "$DOWNLOAD_URL"
-elif command -v wget >/dev/null 2>&1; then
-  wget --show-progress -O "$TEMP_ARCHIVE" "$DOWNLOAD_URL"
-else
-  echo "ERROR: Neither curl nor wget was found. Please install curl or wget." >&2
-  exit 1
+download_file() {
+  local url="$1"
+  if command -v curl >/dev/null 2>&1; then
+    curl -fL --progress-bar -o "$TEMP_ARCHIVE" "$url"
+  elif command -v wget >/dev/null 2>&1; then
+    wget --show-progress -O "$TEMP_ARCHIVE" "$url"
+  else
+    echo "ERROR: Neither curl nor wget was found. Please install curl or wget." >&2
+    exit 1
+  fi
+}
+
+if ! download_file "$PRIMARY_URL"; then
+  if [ -n "$FALLBACK_URL" ] && download_file "$FALLBACK_URL"; then
+    echo "==> Downloaded from $FALLBACK_URL"
+  else
+    echo "ERROR: Failed to download release archive for version '$VERSION'." >&2
+    echo "Please check available releases at: https://github.com/${REPO}/releases" >&2
+    exit 1
+  fi
 fi
 
 echo "==> [2/3] Extracting archive to $INSTALL_DIR..."
@@ -103,7 +130,6 @@ elif command -v zstd >/dev/null 2>&1; then
   zstd -d -c "$TEMP_ARCHIVE" | tar -xf - -C "$INSTALL_DIR" --strip-components=0
 else
   echo "==> zstd utility not found. Bootstrapping extraction..."
-  # If system tar lacks zstd, extract using standalone tar/zstd
   tar -xf "$TEMP_ARCHIVE" -C "$INSTALL_DIR" 2>/dev/null || {
     echo "ERROR: zstd is required to extract .tar.zst archives. Please install zstd (e.g. apt install zstd / dnf install zstd)." >&2
     exit 1
