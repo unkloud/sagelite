@@ -46,7 +46,7 @@ echo "==> Target output: $OUTPUT_ARCHIVE"
 
 # Check if a specific version was requested (e.g. from a release tag like v10.9 or 10.9)
 EXTRA_SPECS=()
-if [ -n "${SAGELITE_VERSION:-}" ]; then
+if [ -n "${SAGELITE_VERSION:-}" ] && [ "${SAGELITE_VERSION:-}" != "latest" ]; then
   SAGE_TAG="${SAGELITE_VERSION#v}"
   if [[ "$SAGE_TAG" =~ ^[0-9]+\.[0-9]+ ]]; then
     echo "==> Target version specified from release tag: sage = ${SAGE_TAG}"
@@ -76,6 +76,10 @@ fi
 
 echo "==> Environment staged at: $PREFIX"
 
+# Extract resolved SageMath version
+RESOLVED_VERSION="$("$PREFIX/bin/python" -c "import sage.version; print(sage.version.version)" 2>/dev/null || echo "10.x")"
+echo "==> Resolved SageMath version: $RESOLVED_VERSION"
+
 # 3. Optimize payload size (strip redundant static files, docs, and debug symbols)
 echo "==> [2/4] Optimizing payload (stripping non-essential files)..."
 
@@ -104,6 +108,9 @@ chmod +x "$PREFIX/sage"
 echo "==> [3/4] Packaging with conda-pack (Zstandard level 19)..."
 mkdir -p "$(dirname "$OUTPUT_ARCHIVE")"
 
+# Record version metadata file
+echo "$RESOLVED_VERSION" > "$(dirname "$OUTPUT_ARCHIVE")/version.txt"
+
 # Locate conda-pack binary
 if [ -x "$PREFIX/bin/conda-pack" ]; then
   PACK_BIN="$PREFIX/bin/conda-pack"
@@ -131,3 +138,4 @@ echo "==> [4/4] Generating SHA256 checksum..."
 echo "==> Build complete!"
 echo "    Archive:  $OUTPUT_ARCHIVE ($(du -h "$OUTPUT_ARCHIVE" | cut -f1))"
 echo "    Checksum: ${OUTPUT_ARCHIVE}.sha256"
+echo "    Version:  $RESOLVED_VERSION"
