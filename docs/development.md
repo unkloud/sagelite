@@ -6,7 +6,7 @@ This document details the build system, architecture, recipe configuration, veri
 
 ## 1. Architecture Overview
 
-`sagelite` packages standard pre-compiled Conda-Forge packages into a relocatable native Linux directory.
+`sagelite` packages standard pre-compiled Conda-Forge packages into a standalone, self-contained native Linux directory.
 
 ```text
 [recipes/environment.<arch>.yml]
@@ -27,9 +27,9 @@ This document details the build system, architecture, recipe configuration, veri
 ### Core Components
 1. **Upstream Source (`conda-forge`):** Provides binaries compiled against a `glibc 2.28` baseline sysroot.
 2. **Solver & Staging (`micromamba`):** Resolves dependency graphs and unpacks packages in under a minute.
-3. **Payload Optimization (`scripts/build.sh`):** Reduces total uncompressed footprint from ~8 GB to ~4.2 GB.
-4. **Relocation & Packaging (`conda-pack`):** Records prefix placeholders and compresses the tree with Zstandard level 19 into a ~1.3 GB archive.
-5. **Entrypoint Wrapper (`scripts/entrypoint.sh`):** Resolves directory location dynamically, runs `conda-unpack` once on first launch, and sets runtime environment isolation variables.
+3. **Payload Optimization (`scripts/build.sh`):** Reduces total uncompressed footprint from ~8 GB to ~4.2 GB while preserving compiler static runtimes (`libgcc.a`, `libstdc++.a`).
+4. **Fixed-Target Packaging (`conda-pack`):** Records prefix placeholders and compresses the tree with Zstandard level 19 into a ~1.3 GB archive.
+5. **Entrypoint Wrapper (`scripts/entrypoint.sh`):** Resolves directory location, runs `conda-unpack` once upon initial launch at target destination, isolates environment (`unset PYTHONPATH`), and sources toolchain activation scripts.
 
 ---
 
@@ -67,7 +67,7 @@ This document details the build system, architecture, recipe configuration, veri
 `scripts/test.sh` runs five sequential validation tiers:
 
 ```bash
-# 1. Extract archive to a test directory
+# 1. Extract archive directly to target test directory
 mkdir -p /tmp/test-sagelite
 tar --zstd -xf artifacts/sagemath-portable-x86_64.tar.zst -C /tmp/test-sagelite
 
@@ -75,19 +75,7 @@ tar --zstd -xf artifacts/sagemath-portable-x86_64.tar.zst -C /tmp/test-sagelite
 ./scripts/test.sh /tmp/test-sagelite/sage
 ```
 
-### 4.2. Testing Relocatability
-
-Verify that the distribution functions after being moved to a different path:
-
-```bash
-# Relocate directory
-mv /tmp/test-sagelite /tmp/relocated-sagelite
-
-# Execute tests from relocated path
-./scripts/test.sh /tmp/relocated-sagelite/sage
-```
-
-### 4.3. Test Tiers Summary
+### 4.2. Test Tiers Summary
 
 | Tier | Test Scope | Verification Method |
 | :--- | :--- | :--- |
@@ -100,7 +88,7 @@ mv /tmp/test-sagelite /tmp/relocated-sagelite
 To run the extended full doctest suite across all Sage modules:
 
 ```bash
-./scripts/test.sh /tmp/relocated-sagelite/sage full
+./scripts/test.sh /tmp/test-sagelite/sage full
 ```
 
 ---
@@ -125,7 +113,7 @@ Recipes are defined in `recipes/`:
 1. **Preserve Compiler Static Runtimes:** When stripping static libraries in `scripts/build.sh`, never delete files under `lib/gcc/*` or `sysroot/*`. GCC requires internal static archives (`libgcc.a`, `libstdc++.a`) when compiling Cython extensions at runtime.
 2. **Conda-Pack Missing Files Flag:** Always pass `--ignore-missing-files` to `conda-pack` because non-essential files are stripped prior to packing.
 3. **Cython Globals in Non-Interactive Mode:** In CLI evaluation scripts (`sage -c "..."`), initialize user-space globals via `set_globals(globals())` before importing dynamically compiled Cython modules.
-4. **Environment Isolation:** The `./sage` wrapper must enforce `PYTHONNOUSERSITE=1` and set `PYTHONHOME="$DIR"` to prevent host Python package pollution.
+4. **Environment Isolation & Toolchain Activation:** The `./sage` wrapper must enforce `unset PYTHONPATH`, `PYTHONNOUSERSITE=1`, set `PYTHONHOME="$DIR"`, and source `$DIR/etc/conda/activate.d/*.sh` to prevent host pollution and correctly inject compiler sysroot flags.
 
 ---
 
@@ -135,7 +123,7 @@ The GitHub Actions workflow (`.github/workflows/build.yml`) builds and tests on 
 * `x86_64` on `ubuntu-latest`
 * `aarch64` on `ubuntu-24.04-arm`
 * Caches `~/.micromamba/pkgs` keyed by recipe hash.
-* Tests directory extraction, relocation, and execution of `scripts/test.sh` on every build.
+* Tests archive extraction to target path and executes `scripts/test.sh` on every build.
 
 ---
 

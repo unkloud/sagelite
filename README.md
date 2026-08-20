@@ -2,7 +2,7 @@
 
 A lightweight, zero-setup, and portable SageMath distribution for Linux.
 
-`sagelite` packages standard pre-compiled Conda-Forge binaries into a standalone, relocatable archive. It extracts and runs on modern Linux distributions without requiring root privileges, Docker or containers, pre-installed Python/Conda environments, or host development libraries.
+`sagelite` packages standard pre-compiled Conda-Forge binaries into a standalone, self-contained archive. It extracts and runs on modern Linux distributions without requiring root privileges, Docker or containers, pre-installed Python/Conda environments, or host development libraries.
 
 ---
 
@@ -35,12 +35,11 @@ curl -fsSL https://raw.githubusercontent.com/unkloud/sagelite/master/scripts/ins
    * **x86_64:** `sagemath-portable-x86_64.tar.zst`
    * **ARM64 (aarch64):** `sagemath-portable-aarch64.tar.zst`
 
-2. Extract and run from any directory:
+2. Extract directly to your chosen destination directory and run:
 
 ```bash
-tar --zstd -xf sagemath-portable-x86_64.tar.zst
-cd sagemath-portable-x86_64/
-./sage
+tar --zstd -xf sagemath-portable-x86_64.tar.zst -C ~/.local/share/sagelite
+~/.local/share/sagelite/sage
 ```
 
 ---
@@ -86,7 +85,7 @@ SageMath kernels and interactive widgets (`ipywidgets`) are pre-configured.
 
 ```bash
 # Evaluate an inline mathematical expression
-sage -c "print(factor(x^10 - 1))"
+sage -c "x = var('x'); print(factor(x^10 - 1))"
 
 # Run a Sage script
 sage script.sage
@@ -142,9 +141,9 @@ sage -pytest       # Run pytest in the bundled environment
 | **Setup Time** | Hours | 5–15 minutes | 1–3 minutes | < 30 seconds |
 | **Root Required** | No | No | Usually (daemon) | No |
 | **Dependencies** | Full host toolchain | Conda/Mamba | Docker/Podman runtime | None |
-| **Relocatable** | No (fixed path) | Environment-bound | Containerized | Move/rename anywhere |
-| **Host Python Isolation** | Manual | Environment-dependent | Contained | Automatic (`PYTHONNOUSERSITE=1`) |
-| **Offline Ready** | No | Requires local mirror | Yes | Single file |
+| **Target Placement** | Fixed path | Environment directory | Container container | Any target directory |
+| **Host Python Isolation** | Manual | Environment-dependent | Contained | Automatic (`PYTHONNOUSERSITE=1`, `unset PYTHONPATH`) |
+| **Offline Ready** | No | Requires local mirror | Yes | Single archive file |
 
 ---
 
@@ -155,7 +154,7 @@ sage -pytest       # Run pytest in the bundled environment
 | **CAS (Computer Algebra System)** | Software for symbolic mathematical calculations (e.g. GAP for group theory, Singular for polynomial algebra, PARI/GP for number theory). |
 | **`glibc`** | The GNU C Library standard runtime on Linux. `sagelite` targets `glibc 2.28` to ensure binary compatibility across all major Linux distributions released since 2019. |
 | **Sysroot** | A self-contained set of header files and standard libraries used by the compiler to build binaries against a specific target `glibc` baseline. |
-| **Prefix Relocation** | The process of updating hardcoded directory paths in binaries and script shebangs (`#!/path/to/python`) when an application is moved to a new directory. `sagelite` handles this automatically on first run via `conda-unpack`. |
+| **Prefix Initialization** | The one-time process of updating placeholder paths in binaries and script shebangs (`#!/path/to/python`) to the target destination where the archive is extracted (handled automatically on first run via `conda-unpack`). |
 | **Cython JIT** | Just-In-Time compilation of Cython/C code directly inside interactive Sage sessions or Jupyter notebook cells (`%cython`). |
 | **Zstandard (`.tar.zst`)** | A modern compression format providing high compression ratios and fast decompression speeds. |
 | **`PYTHONNOUSERSITE`** | An environment variable that prevents Python from loading user packages from `~/.local/lib/python*`, avoiding conflicts between host packages and the bundled SageMath runtime. |
@@ -179,21 +178,20 @@ Install `zstd` using your system package manager:
 
 Then extract with:
 ```bash
-zstd -d -c sagemath-portable-x86_64.tar.zst | tar -xf -
+zstd -d -c sagemath-portable-x86_64.tar.zst | tar -xf - -C ~/.local/share/sagelite
 ```
 
 ### `version 'GLIBC_2.28' not found`
 `sagelite` requires `glibc >= 2.28`. Operating systems older than Ubuntu 20.04, Debian 10, or RHEL 8 cannot run the pre-built binaries.
 
 ### Conflicts with host Python packages
-The `./sage` wrapper isolates `PYTHONHOME` and ignores user site-packages automatically. If you have a custom `PYTHONPATH` set in your shell, unset it before running Sage:
+The `./sage` wrapper automatically unsets `PYTHONPATH` and ignores user site-packages. If you have custom environment variables interfering with Sage, launch with a clean environment:
 ```bash
-unset PYTHONPATH
-sage
+env -i HOME="$HOME" PATH="$HOME/.local/bin:/usr/bin:/bin" sage
 ```
 
-### Relocating the directory
-You can move or rename the extracted directory at any time. The wrapper detects the new location and re-applies path patching automatically on the next run.
+### Moving an initialized installation
+Once initialized at a directory, binary offsets are bound to that path. To run from a different location, extract the original archive directly into the new target directory.
 
 ---
 
