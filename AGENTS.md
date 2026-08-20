@@ -1,43 +1,42 @@
 # AGENTS.md — Development & Operational Guidelines for `sagelite`
 
-Welcome to **`sagelite`**. This document serves as the single source of truth, architectural guide, and operational manual for AI agents and developers working on this codebase.
+This document serves as the operational guide, architectural specification, and guardrail manual for AI agents and human developers working on the **`sagelite`** repository.
 
 ---
 
 ## 1. Project Overview & Mission
 
-**`sagelite`** is a zero-setup, relocatable, and fully portable SageMath distribution for Linux.
+**`sagelite`** is a zero-setup, relocatable, and 100% native portable SageMath distribution for Linux.
 
 ### Key Objectives:
-* **Zero Host Prerequisites & No Containers:** Provide a single self-contained archive that runs natively on any modern Linux distribution without requiring root permissions, Docker/containers, system-level math libraries (GMP, MPFR, FLINT, Singular, GAP), or pre-installed Conda/Python.
-* **glibc 2.28 Base Compatibility:** Target dynamic linker baseline `glibc 2.28` via Conda-Forge hermetic sysroots (compatible with Ubuntu $\ge$ 20.04, Debian $\ge$ 10, RHEL/Alma/Rocky 8+, Fedora $\ge$ 29, openSUSE, and Arch).
-* **Embedded JIT Toolchain & Pip Extensibility:** Bundle a hermetic C/C++/Fortran compiler (`gcc`, `g++`, `gfortran`, headers) and `pip` so runtime Cython compilation (`%cython`) and adding Python packages work natively out of the box.
-* **Official Test Framework Integration:** Support both fast smoke tests and official SageMath doctest execution (`sage.doctest` controller) to verify algebraic algorithms and CAS backends.
-* **Self-Locating & Lazy-Unpacking:** Provide a zero-overhead `./sage` entrypoint that automatically resolves installation paths, handles binary prefix patching (`conda-unpack`) on first run, and sanitizes environment variables.
+* **Zero Host Prerequisites & No Containers:** Single self-contained archive that runs natively on any modern Linux distribution without requiring root privileges, Docker/containers, system-level math libraries (GMP, MPFR, FLINT, Singular, GAP), or pre-installed Conda/Python.
+* **glibc 2.28 Base Compatibility:** Anchored to dynamic linker baseline `glibc 2.28` via Conda-Forge hermetic sysroots (compatible with Ubuntu $\ge$ 20.04, Debian $\ge$ 10, RHEL/Alma/Rocky 8+, Fedora $\ge$ 29, openSUSE, and Arch).
+* **Embedded JIT Toolchain & Pip Extensibility:** Bundles a hermetic C/C++/Fortran compiler (`gcc`, `g++`, `gfortran`, headers) and `pip` so runtime Cython compilation (`%cython`) and adding Python packages work natively out of the box.
+* **Official Test Framework Integration:** Validates CAS algorithms and backends using fast smoke tests and the official SageMath doctest runner (`sage.doctest` controller).
+* **Self-Locating & Lazy-Unpacking:** Zero-overhead `./sage` entrypoint that automatically resolves installation paths, handles dynamic binary prefix patching (`conda-unpack`) on first run, and sanitizes environment variables.
 * **Optimized Payload:** Stripped footprint achieving **~1.2 – 1.3 GB** compressed (`.tar.zst`, Level 19) and **~4.2 GB** extracted.
 
 ---
 
 ## 2. Invariant Rules & Guardrails for Agents
 
-When implementing features, fixing bugs, or updating recipes, you **MUST** uphold the following rules:
+When implementing features, modifying recipes, or running builds, you **MUST** uphold the following rules:
 
 ### 1. 100% Native Architecture (Zero Docker / Zero Containerization)
-* **NEVER** introduce Docker, Podman, Singularity, or container runtime dependencies for end-user execution.
+* **NEVER** introduce Docker, Podman, Singularity, or container runtime dependencies.
 * The end-user artifact is a simple native directory containing native Linux executables, libraries, and the `./sage` entrypoint.
 * Builds and CI pipelines run directly on native Linux runners using `micromamba` and `conda-pack`.
 
 ### 2. Hermetic Environment Isolation
-* The runtime wrapper **MUST** prevent host Python and library pollution.
-* Always enforce:
+* The runtime wrapper **MUST** prevent host Python and library pollution. Always enforce:
   * `PYTHONNOUSERSITE=1` (blocks `~/.local/lib/python*`)
   * `PYTHONHOME="$DIR"`
   * `SAGE_ROOT="$DIR"`
-  * Isolated `$PATH` and `$LD_LIBRARY_PATH` prioritizing the bundled prefix.
+  * Prepend `$DIR/bin` to `PATH` and `$DIR/lib` to `LD_LIBRARY_PATH`.
 
 ### 3. Multi-Architecture Parity
-* Support both `linux-64` (`x86_64`) and `linux-aarch64` (`ARM64`).
-* Architecture-specific packages (e.g. `gcc_linux-64` vs `gcc_linux-aarch64`, `sysroot_linux-64` vs `sysroot_linux-aarch64`) must be dynamically parameterized or split into dedicated environment files.
+* First-class support for both `linux-64` (`x86_64`) and `linux-aarch64` (`ARM64`).
+* Architecture-specific packages (e.g. `gcc_linux-64` vs `gcc_linux-aarch64`, `sysroot_linux-64` vs `sysroot_linux-aarch64`) must be dynamically handled or split into dedicated recipe files.
 
 ### 4. Aggressive Size Optimization & Toolchain Preservation
 * Every build pipeline execution **MUST** strip unneeded artifacts prior to packaging:
@@ -54,8 +53,6 @@ When implementing features, fixing bugs, or updating recipes, you **MUST** uphol
 ---
 
 ## 3. Repository Architecture & Layout
-
-When creating or modifying repository components, adhere to this layout:
 
 ```text
 sagelite/
@@ -81,247 +78,98 @@ sagelite/
 
 ---
 
-## 4. Component Specifications
+## 4. Operational Runbook
 
-### 4.1. Conda Environment (`recipes/environment.x86_64.yml`)
-
-```yaml
-name: sage-portable
-channels:
-  - conda-forge
-  - nodefaults
-dependencies:
-  # Core System & SageMath
-  - sage = 10.*
-  - python = 3.12.*
-  - pip
-
-  # Interactive Notebook UI
-  - jupyterlab
-  - ipywidgets
-
-  # Runtime Cython & Compilation Toolchain (for %cython cells)
-  - cython >= 3.0
-  - gcc_linux-64
-  - gxx_linux-64
-  - gfortran_linux-64
-  - sysroot_linux-64
-  - pkg-config
-
-  # Packaging & Relocation Utilities
-  - conda-pack
-  - zstandard
-```
-
-> **Note for `aarch64`:** Replace `gcc_linux-64`, `gxx_linux-64`, `gfortran_linux-64`, `sysroot_linux-64` with `gcc_linux-aarch64`, `gxx_linux-aarch64`, `gfortran_linux-aarch64`, `sysroot_linux-aarch64`.
-
----
-
-### 4.2. Build & Optimization Pipeline (`scripts/build.sh`)
+### 4.1. Local Build Workflow
 
 ```bash
-#!/usr/bin/env bash
-set -euo pipefail
+# 1. Build the portable distribution (auto-detects architecture):
+./scripts/build.sh
 
-# Architecture detection
-HOST_ARCH="$(uname -m)"
-case "$HOST_ARCH" in
-  x86_64)
-    DEFAULT_RECIPE="recipes/environment.x86_64.yml"
-    ARCH_TAG="x86_64"
-    MAMBA_ARCH="linux-64"
-    ;;
-  aarch64|arm64)
-    DEFAULT_RECIPE="recipes/environment.aarch64.yml"
-    ARCH_TAG="aarch64"
-    MAMBA_ARCH="linux-aarch64"
-    ;;
-  *)
-    echo "ERROR: Unsupported host architecture: $HOST_ARCH" >&2
-    exit 1
-    ;;
-esac
-
-RECIPE_FILE="${1:-$DEFAULT_RECIPE}"
-OUTPUT_ARCHIVE="${2:-artifacts/sagemath-portable-${ARCH_TAG}.tar.zst}"
-ENV_NAME="sage-portable"
-
-# Auto-bootstrap standalone micromamba if missing from PATH
-if ! command -v micromamba >/dev/null 2>&1; then
-  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-  CACHE_BIN="$PROJECT_ROOT/.cache/bin"
-  
-  if [ -x "$CACHE_BIN/micromamba" ]; then
-    export PATH="$CACHE_BIN:$PATH"
-  else
-    mkdir -p "$CACHE_BIN"
-    curl -fsSL "https://micro.mamba.pm/api/micromamba/${MAMBA_ARCH}/latest" | tar -xj -C "$CACHE_BIN" --strip-components=1 bin/micromamba
-    export PATH="$CACHE_BIN:$PATH"
-  fi
-fi
-
-# 1. Create isolated Conda environment using micromamba
-micromamba create -y -n "$ENV_NAME" -f "$RECIPE_FILE"
-
-# 2. Resolve environment prefix path
-PREFIX="$(micromamba env list | awk -v env="$ENV_NAME" '$1 == env {print $NF}')"
-
-# 3. Strip non-essential files and static caches
-find "$PREFIX" -type f -name "*.la" -delete
-find "$PREFIX" -type f -name "*.a" \
-  ! -path "*/lib/gcc/*" \
-  ! -path "*/sysroot/*" \
-  -delete
-
-rm -rf "$PREFIX/share/doc" \
-       "$PREFIX/share/man" \
-       "$PREFIX/lib/python"*/test \
-       "$PREFIX/lib/python"*/site-packages/sage/tests
-
-find "$PREFIX/bin" "$PREFIX/lib" -type f -executable -exec strip --strip-unneeded {} + 2>/dev/null || true
-
-# 4. Inject root wrapper script
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cp "$SCRIPT_DIR/entrypoint.sh" "$PREFIX/sage"
-chmod +x "$PREFIX/sage"
-
-# 5. Package with conda-pack (Zstandard level 19)
-mkdir -p "$(dirname "$OUTPUT_ARCHIVE")"
-"$PREFIX/bin/conda-pack" \
-  -p "$PREFIX" \
-  -o "$OUTPUT_ARCHIVE" \
-  --compress-level 19 \
-  --n-threads -1 \
-  --ignore-missing-files \
-  --format tar.zst \
-  --force
-
-(cd "$(dirname "$OUTPUT_ARCHIVE")" && sha256sum "$(basename "$OUTPUT_ARCHIVE")" > "$(basename "$OUTPUT_ARCHIVE").sha256")
+# 2. Or build with explicit recipe and custom output path:
+./scripts/build.sh recipes/environment.x86_64.yml artifacts/sagemath-portable-x86_64.tar.zst
 ```
 
----
-
-### 4.3. Self-Locating Zero-Setup Entrypoint (`scripts/entrypoint.sh` $\rightarrow$ `./sage`)
+### 4.2. Local Verification & Relocation Testing
 
 ```bash
-#!/usr/bin/env bash
-# Distribution root wrapper: sage
-set -e
+# 1. Extract to a test directory:
+mkdir -p /tmp/test-sagelite
+tar --zstd -xf artifacts/sagemath-portable-x86_64.tar.zst -C /tmp/test-sagelite
 
-# Resolve directory location independent of invocation path or symlinks
-SOURCE="${BASH_SOURCE[0]}"
-while [ -h "$SOURCE" ]; do
-  DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
-  SOURCE="$(readlink "$SOURCE")"
-  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
-done
-DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
+# 2. Relocate directory to verify dynamic path patching:
+mv /tmp/test-sagelite /tmp/relocated-sagelite
 
-# Run one-time binary dynamic prefix patching if not yet initialized
-if [ ! -f "$DIR/.unpacked" ]; then
-  if [ -f "$DIR/bin/conda-unpack" ]; then
-    "$DIR/bin/python" "$DIR/bin/conda-unpack" >/dev/null 2>&1 || true
-    touch "$DIR/.unpacked"
-  fi
-fi
+# 3. Run the automated 5-tier verification suite (~30s):
+./scripts/test.sh /tmp/relocated-sagelite/sage
 
-# Sanitize environment to prevent host Python pollution
-export SAGE_ROOT="$DIR"
-export PYTHONNOUSERSITE=1
-export PYTHONHOME="$DIR"
-export PATH="$DIR/bin:$PATH"
-export LD_LIBRARY_PATH="$DIR/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-
-# Convenience sub-command forwarding
-if [ $# -gt 0 ]; then
-  case "$1" in
-    -pip|--pip|pip)
-      shift; exec "$DIR/bin/pip" "$@" ;;
-    -python|--python|python)
-      shift; exec "$DIR/bin/python" "$@" ;;
-    -pytest|--pytest|pytest)
-      shift; exec "$DIR/bin/pytest" "$@" ;;
-    -gap|--gap|gap)
-      shift; exec "$DIR/bin/gap" "$@" ;;
-    -singular|--singular|singular)
-      shift; exec "$DIR/bin/Singular" "$@" ;;
-    -gp|--gp|gp)
-      shift; exec "$DIR/bin/gp" "$@" ;;
-  esac
-fi
-
-# Route execution directly to internal Sage runtime
-exec "$DIR/bin/sage" "$@"
+# 4. (Optional) Run full official Sage doctest suite:
+./scripts/test.sh /tmp/relocated-sagelite/sage full
 ```
 
----
-
-### 4.4. Verification Suite (`scripts/test.sh`)
+### 4.3. Installing and Uninstalling
 
 ```bash
-#!/usr/bin/env bash
-set -euo pipefail
+# Install to ~/.local/share/sagelite and symlink to ~/.local/bin/sage:
+./scripts/install.sh
 
-SAGE_BIN="${1:-./sage}"
-MODE="${2:-fast}"
+# Install to custom path:
+./scripts/install.sh --dir=/opt/sagelite
 
-# 1. Core Algebra & CAS Backends (GAP, Singular, PARI/GP)
-"$SAGE_BIN" -c "assert SymmetricGroup(5).order() == 120"
-"$SAGE_BIN" -c "x = var('x'); assert factor(x^10 - 1) != 0"
-"$SAGE_BIN" -c "assert int(gap('2+2')) == 4"
-"$SAGE_BIN" -c "assert int(singular('2+2')) == 4"
-"$SAGE_BIN" -c "assert pari('fibonacci(10)') == 55"
-
-# 2. Official Sage Doctest Subsystem Verification (`sage.doctest`)
-"$SAGE_BIN" -c "
-from sage.doctest.control import DocTestController, DocTestDefaults
-import sage.combinat.permutation
-options = DocTestDefaults()
-controller = DocTestController(options, [sage.combinat.permutation.__file__])
-res = controller.run()
-assert res == 0, f'Doctest failed with exit code {res}'
-"
-
-# 3. Runtime Cython JIT Compilation
-"$SAGE_BIN" -c "
-from sage.repl.user_globals import set_globals
-set_globals(globals())
-from sage.misc.cython import cython_lambda
-f = cython_lambda('long a, long b', 'a + b')
-assert f(5, 7) == 12
-"
-
-# 4. Pip Extensibility
-"$SAGE_BIN" -pip --version >/dev/null
-
-# 5. Headless Jupyter Server Verification
-"$SAGE_BIN" -n jupyter --help >/dev/null 2>&1 || "$SAGE_BIN" -c "import jupyterlab; print('JupyterLab version:', jupyterlab.__version__)"
+# Uninstall:
+./scripts/uninstall.sh -y
 ```
 
 ---
 
-## 5. End-User Distribution Structure
+## 5. Technical Specifications & Critical Gotchas
 
-The generated tarball unpacks into the following native directory structure:
+### 5.1. Conda Recipe Guidelines
+* **Channels:** Always specify `conda-forge` and `nodefaults`.
+* **Sage Pin:** Use `sage = 10.*` wildcard to automatically track the latest stable 10.x release from Conda-Forge.
+* **Python Pin:** Lock to `python = 3.12.*`.
+* **Packaging Dependencies:** Ensure `conda-pack` and `zstandard` are present in dependencies so `conda-pack` can generate `.tar.zst` archives.
 
-```text
-sagemath-portable-linux-x86_64/
-├── sage                    # Unified self-locating entrypoint executable
-├── bin/                    # Embedded binaries (python3, gap, Singular, gcc, pip)
-├── include/                # Math headers (gmp.h, flint.h, Python.h)
-├── lib/                    # Shared objects (.so) and Python site-packages
-└── share/                  # CAS data libraries (gap/, singular/, jupyter/)
-```
+### 5.2. Payload Optimization & Stripping Gotchas
+* **`libgcc.a` Preservation:** When removing static libraries (`*.a`), **never** delete static files from `lib/gcc/*` or `sysroot/*`. GCC's internal static runtimes are required when linking Cython extensions.
+  ```bash
+  find "$PREFIX" -type f -name "*.a" ! -path "*/lib/gcc/*" ! -path "*/sysroot/*" -delete
+  ```
+* **`conda-pack` Flag Requirement:** Always pass `--ignore-missing-files` and `--n-threads -1` to `conda-pack`. Because unneeded docs, tests, and static libraries were intentionally stripped, `conda-pack` will fail if `--ignore-missing-files` is omitted.
+
+### 5.3. Entrypoint Wrapper Design
+* **Sentinel File:** Dynamic prefix relocation (`conda-unpack`) is guarded by the sentinel file `$DIR/.unpacked`.
+* **CLI Convenience Routing:** The `./sage` wrapper intercepts sub-commands to provide direct access to embedded utilities:
+  * `./sage -pip ...` $\rightarrow$ `$DIR/bin/pip ...`
+  * `./sage -python ...` $\rightarrow$ `$DIR/bin/python ...`
+  * `./sage -gap ...` $\rightarrow$ `$DIR/bin/gap ...`
+  * `./sage -singular ...` $\rightarrow$ `$DIR/bin/Singular ...`
+  * `./sage -gp ...` $\rightarrow$ `$DIR/bin/gp ...`
+
+### 5.4. Testing & Cython Evaluation in Non-Interactive Mode
+* **Cython User Globals:** When compiling and executing Cython modules dynamically via `sage -c "..."`, Sage requires user-space globals to be initialized before module import:
+  ```python
+  from sage.repl.user_globals import set_globals
+  set_globals(globals())
+  from sage.misc.cython import cython_lambda
+  f = cython_lambda('long a, long b', 'a + b')
+  assert f(5, 7) == 12
+  ```
 
 ---
 
-## 6. Operational Runbook for Agents
+## 6. Agent Quality & Verification Checklist
 
-When requested to perform tasks in this repository:
+Before completing any task or committing changes, verify:
 
-1. **Native Shell Execution:** Ensure all scripts run natively with `set -euo pipefail` and clean error handling without container wrappers.
-2. **Adding Dependencies:** When adding Python or math dependencies, verify compatibility in `recipes/environment.*.yml` without introducing heavy unneeded packages.
-3. **Preserving Compiler Toolchain:** When writing size-reduction routines, **never** delete static files from `lib/gcc/*` or `sysroot/*` as they are essential for runtime Cython compilation.
-4. **Validating Changes:** Run `./scripts/test.sh` against the extracted distribution to verify relocatability, algebra/Cython execution, and pip management.
-5. **Inspecting Artifact Sizes:** Check size before and after any recipe modification to ensure extracted size stays within the target footprint.
+1. [ ] **Syntax Validation:** Run `bash -n scripts/*.sh` on all modified shell scripts.
+2. [ ] **Error Handling:** All bash scripts contain `set -euo pipefail` and clean failure paths.
+3. [ ] **Relocatability:** Tested extraction, directory movement (`mv`), and invocation from the moved directory.
+4. [ ] **Verification Pass:** `./scripts/test.sh <path_to_sage>` executes with return code `0` across all 5 test tiers:
+   * Core CAS backends (GAP, Singular, PARI/GP)
+   * Official `sage.doctest` controller (1,300+ tests)
+   * On-the-fly Cython JIT compilation (`%cython`)
+   * Pip package management
+   * Headless JupyterLab stack
+5. [ ] **Size Bounds:** Archive size stays within **~1.2 – 1.3 GB** compressed and **~4.2 GB** extracted.
+6. [ ] **Commit Signatures:** Ensure commits are cryptographically signed when committing changes.
