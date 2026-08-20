@@ -178,28 +178,46 @@ You can also trigger builds and releases without tagging:
 
 ## 9. Future Roadmap & Technical TODOs
 
-### 1. Automated Requirements Replay on Upgrades (Phase 2 Lifecycle)
-* **Goal:** Allow users to retain custom `pip install`ed packages when upgrading between minor SageMath releases without causing ABI conflicts with core libraries.
+### 1. Built-in Diagnostic Health Check (`sage --doctor` / `sage --check`)
+* **Goal:** Provide users with an instant self-diagnostic command to verify the internal compiler toolchain, sysroot headers, and CAS dynamic libraries on their host system without external scripts.
+* **Tasks:**
+  - [ ] Add `./sage --doctor` / `./sage --check` CLI subcommand in `scripts/entrypoint.sh`.
+  - [ ] Run fast in-process diagnostics:
+    - Verify GCC toolchain can compile a minimal C extension and link against `$DIR/lib`.
+    - Verify GAP, Singular, and PARI/GP respond to basic algebraic evaluations.
+    - Check `$DIR/bin/python` interpreter and JupyterLab server responsiveness.
+  - [ ] Print clean diagnostic summary with clear recommendations if host kernel or environment anomalies are detected.
+
+### 2. Automated Requirements Replay on Upgrades (Phase 2 Lifecycle)
+* **Goal:** Allow users to retain custom `pip install`ed packages when upgrading between SageMath releases while safely handling Python minor version transitions.
 * **Tasks:**
   - [ ] **Build-Time Manifest Generation:** During `scripts/build.sh`, save the baseline bundled package names into `$PREFIX/lib/sagelite_manifest.txt` via `pip list --format=freeze | cut -d= -f1 | sort -u`.
   - [ ] **Pre-Flight Diffing in `install.sh`:** Before replacing `~/.local/share/sagelite`, diff the active environment's package list against `sagelite_manifest.txt` to capture only user-added packages into `~/.sage/custom_requirements.txt`.
-  - [ ] **Post-Flight Replay:** Execute `$NEW_DIR/bin/python -m pip install -r ~/.sage/custom_requirements.txt` with non-fatal error handling so upgrade success is never blocked by external package build errors.
+  - [ ] **Cross-Python Version Invalidation:** If upgrading across Python minor versions (e.g. Python 3.12 $\rightarrow$ 3.13), strip Python-specific binary build pins and re-resolve unpinned package names against the new Python interpreter.
+  - [ ] **Non-Fatal Post-Flight Replay:** Execute `$NEW_DIR/bin/python -m pip install -r ~/.sage/custom_requirements.txt` with non-fatal logging so upgrade success is never blocked by external wheel availability.
 
-### 2. Desktop & GUI Menu Integration
+### 3. Upstream Sysroot Evolution Policy (`glibc` Baseline Tracking)
+* **Goal:** Maintain long-term binary compatibility while aligning with Conda-Forge's sysroot deprecation lifecycle.
+* **Policy & Strategy:**
+  - `sagelite` tracks Conda-Forge's active baseline sysroot (currently `glibc 2.28`, supported through 2029 on RHEL 8 / Debian 10+ / Ubuntu 20.04+).
+  - When Conda-Forge transitions its default baseline to a newer sysroot (e.g. `glibc 2.34` / RHEL 9), `sagelite` recipes will adopt the new baseline for subsequent SageMath releases.
+  - Past releases (e.g. `v10.9` on `glibc 2.28`) remain permanently archived and downloadable on GitHub Releases as frozen legacy distributions for older LTS machines.
+
+### 4. Desktop & GUI Menu Integration
 * **Goal:** Enable users to launch SageMath interactive shell and JupyterLab directly from their desktop environment application menus (GNOME, KDE, XFCE).
 * **Tasks:**
   - [ ] Add `./sage --install-desktop` subcommand.
   - [ ] Generate an XDG `.desktop` file at `~/.local/share/applications/sagelite.desktop` and `~/.local/share/applications/sagelite-jupyter.desktop`.
   - [ ] Install bundled SageMath SVG icon to `~/.local/share/icons/hicolor/scalable/apps/sagelite.svg`.
 
-### 3. Automated Upstream Version Watcher (CI Cron)
+### 5. Automated Upstream Version Watcher (CI Cron)
 * **Goal:** Automatically detect when new stable SageMath releases are published to Conda-Forge.
 * **Tasks:**
   - [ ] Implement a scheduled GitHub Actions cron job (`.github/workflows/check-upstream.yml`) running weekly.
   - [ ] Query Conda-Forge channel API for the highest stable `sage` version tag.
-  - [ ] If a newer version is discovered, automatically open a tracking issue or trigger a draft release build.
+  - [ ] If a newer version is discovered, automatically trigger a draft release build or send a notification.
 
-### 4. Offline / Air-Gapped Deployment Bundle
+### 6. Offline / Air-Gapped Deployment Bundle
 * **Goal:** Simplify installation on air-gapped compute clusters and offline machines without internet access.
 * **Tasks:**
   - [ ] Provide an `--offline` flag in `scripts/install.sh` that looks for local `sagemath-portable-<arch>.tar.zst` in the current directory instead of attempting network downloads.
