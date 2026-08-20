@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Configuration defaults
-REPO="${SAGELITE_REPO:-${GITHUB_REPOSITORY:-sagelite/sagelite}}"
+REPO="${SAGELITE_REPO:-${GITHUB_REPOSITORY:-unkloud/sagelite}}"
 DEFAULT_INSTALL_DIR="$HOME/.local/share/sagelite"
 BIN_DIR="$HOME/.local/bin"
 VERSION="latest"
@@ -42,7 +42,7 @@ while [[ $# -gt 0 ]]; do
       echo "Options:"
       echo "  -d, --dir=PATH      Installation target directory (default: ~/.local/share/sagelite)"
       echo "  -v, --version=TAG   Release version tag (default: latest)"
-      echo "  --repo=OWNER/REPO   GitHub repository (default: sagelite/sagelite)"
+      echo "  --repo=OWNER/REPO   GitHub repository (default: unkloud/sagelite)"
       echo "  -h, --help          Show this help message"
       exit 0
       ;;

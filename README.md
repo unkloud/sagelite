@@ -14,24 +14,24 @@ Installs the latest release of `sagelite` to `~/.local/share/sagelite` and symli
 
 ```bash
 # Install the latest release
-curl -fsSL https://github.com/sagelite/sagelite/releases/latest/download/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/unkloud/sagelite/master/scripts/install.sh | bash
 ```
 
 To install a specific version (e.g. `10.9`):
 
 ```bash
-curl -fsSL https://github.com/sagelite/sagelite/releases/latest/download/install.sh | bash -s -- 10.9
+curl -fsSL https://raw.githubusercontent.com/unkloud/sagelite/master/scripts/install.sh | bash -s -- 10.9
 ```
 
 To install to a custom directory:
 
 ```bash
-curl -fsSL https://github.com/sagelite/sagelite/releases/latest/download/install.sh | bash -s -- --dir=/opt/sagelite
+curl -fsSL https://raw.githubusercontent.com/unkloud/sagelite/master/scripts/install.sh | bash -s -- --dir=/opt/sagelite
 ```
 
 ### Manual Download & Extraction
 
-1. Download the archive for your architecture from GitHub Releases:
+1. Download the archive for your architecture from [GitHub Releases](https://github.com/unkloud/sagelite/releases):
    * **x86_64:** `sagemath-portable-x86_64.tar.zst`
    * **ARM64 (aarch64):** `sagemath-portable-aarch64.tar.zst`
 
