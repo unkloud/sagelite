@@ -44,13 +44,13 @@ echo "==> Using micromamba at: $(command -v micromamba)"
 echo "==> Building recipe: $RECIPE_FILE"
 echo "==> Target output: $OUTPUT_ARCHIVE"
 
-# Check if a specific version was requested (e.g. from a release tag like v10.5 or 10.5)
+# Check if a specific version was requested (e.g. from a release tag like v10.9 or 10.9)
 EXTRA_SPECS=()
 if [ -n "${SAGELITE_VERSION:-}" ]; then
   SAGE_TAG="${SAGELITE_VERSION#v}"
   if [[ "$SAGE_TAG" =~ ^[0-9]+\.[0-9]+ ]]; then
-    echo "==> Target version specified from release tag: sage = ${SAGE_TAG}*"
-    EXTRA_SPECS+=("sage=${SAGE_TAG}*")
+    echo "==> Target version specified from release tag: sage = ${SAGE_TAG}"
+    EXTRA_SPECS+=("sage=${SAGE_TAG}")
   fi
 fi
 
